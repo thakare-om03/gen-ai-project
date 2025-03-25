@@ -62,7 +62,17 @@ class Chain:
             Your job is to write a cold email to the client regarding the job mentioned above describing the capability of {company_name} 
             in fulfilling their needs.
             Also add the most relevant ones from the following links to showcase {company_name}'s portfolio: {link_list}
-            Remember you are {sender_name}, HR at {company_name}. 
+            
+            Remember you are {sender_name}, HR at {company_name}.
+            
+            Format the email properly with:
+            1. A clear subject line starting with "Subject: "
+            2. Professional greeting
+            3. Well-structured paragraphs with proper spacing between them
+            4. A call to action
+            5. Professional closing
+            6. Your name and title in the signature
+            
             Do not provide a preamble.
             ### EMAIL (NO PREAMBLE):
 

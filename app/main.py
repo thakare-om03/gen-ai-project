@@ -104,12 +104,35 @@ def init_session_state():
 def set_step(step):
     st.session_state.step = step
 
-def open_email_client(subject, body, recipient=""):
-    """Open default email client with the generated email"""
+def open_email_client(subject, body, recipient="", email_service="default"):
+    """Open email client with the generated email
+    
+    Args:
+        subject (str): Email subject
+        body (str): Email body
+        recipient (str): Recipient email address (optional)
+        email_service (str): Which email service to use
+    """
     subject_encoded = urllib.parse.quote(subject)
     body_encoded = urllib.parse.quote(body)
-    mailto_link = f"mailto:{recipient}?subject={subject_encoded}&body={body_encoded}"
-    webbrowser.open(mailto_link)
+    
+    if email_service == "gmail":
+        # Gmail composition URL
+        url = f"https://mail.google.com/mail/?view=cm&fs=1&to={recipient}&su={subject_encoded}&body={body_encoded}"
+    elif email_service == "outlook":
+        # Outlook composition URL
+        url = f"https://outlook.live.com/mail/0/deeplink/compose?to={recipient}&subject={subject_encoded}&body={body_encoded}"
+    elif email_service == "yahoo":
+        # Yahoo mail composition URL
+        url = f"https://compose.mail.yahoo.com/?to={recipient}&subject={subject_encoded}&body={body_encoded}"
+    elif email_service == "zoho":
+        # Zoho mail composition URL
+        url = f"https://mail.zoho.com/zm/#mail/compose?to={recipient}&subject={subject_encoded}&body={body_encoded}"
+    else:
+        # Default mailto protocol (opens default email client)
+        url = f"mailto:{recipient}?subject={subject_encoded}&body={body_encoded}"
+    
+    webbrowser.open(url)
 
 def main():
     # Initialize session state
@@ -462,15 +485,33 @@ def main():
             # Email client integration
             st.subheader("Send Options")
             
+            # Add recipient email field
+            recipient_email = st.text_input("Recipient Email Address (Optional):", placeholder="hiring@company.com")
+            
+            # Email service selection
+            email_service = st.selectbox(
+                "Choose Email Service:",
+                options=["default", "gmail", "outlook", "yahoo", "zoho"],
+                format_func=lambda x: {
+                    "default": "Default Email Client",
+                    "gmail": "Gmail",
+                    "outlook": "Outlook",
+                    "yahoo": "Yahoo Mail",
+                    "zoho": "Zoho Mail"
+                }.get(x, x.capitalize())
+            )
+            
             col1, col2 = st.columns(2)
             
             with col1:
                 if st.button("Open in Email Client"):
                     open_email_client(
                         st.session_state.email_subject, 
-                        st.session_state.email_body
+                        st.session_state.email_body,
+                        recipient=recipient_email,
+                        email_service=email_service
                     )
-                    st.success("Opening email client...")
+                    st.success(f"Opening {email_service.capitalize() if email_service != 'default' else 'default email client'}...")
             
             with col2:
                 if st.button("Generate Another Email"):
@@ -482,9 +523,9 @@ def main():
         else:
             st.error("No email has been generated. Please go back and generate an email.")
         
-        # Navigation button - FIX: Change step to 4 instead of 5
+        # Navigation button
         if st.button("← Back to Email Settings"):
-            set_step(4)  # Corrected to go back to step 4
+            set_step(4) 
             st.rerun()
 
 if __name__ == "__main__":
