@@ -7,3 +7,5 @@ chromadb
 streamlit
 pandas
 python-dotenv
+pyperclip
+streamlit-extras

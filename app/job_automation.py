@@ -11,7 +11,7 @@ from portfolio import Portfolio
 from utils import clean_text
 
 class JobAutomation:
-    def __init__(self, target_sites, job_keywords, max_jobs_per_day=5):
+    def __init__(self, target_sites, job_keywords, max_jobs_per_day=5, chain=None, portfolio=None):
         """
         Initialize the job automation system
         
@@ -19,14 +19,29 @@ class JobAutomation:
             target_sites (list): List of job site URLs to scrape
             job_keywords (list): List of keywords to filter jobs by
             max_jobs_per_day (int): Maximum number of emails to generate per day
+            chain (Chain, optional): Chain instance for processing jobs
+            portfolio (Portfolio, optional): Portfolio instance
         """
         self.target_sites = target_sites
         self.job_keywords = job_keywords
         self.max_jobs_per_day = max_jobs_per_day
-        self.chain = Chain()
-        self.portfolio = Portfolio()
-        self.portfolio.load_portfolio()
+        self.chain = chain or Chain()
+        self.portfolio = portfolio or Portfolio()
+        
+        if portfolio is None:
+            self.portfolio.load_portfolio()
+            
         self.processed_jobs = self._load_processed_jobs()
+        self.headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Referer': 'https://www.google.com/',
+            'DNT': '1',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'Cache-Control': 'max-age=0',
+        }
         
     def _load_processed_jobs(self):
         """Load list of already processed job URLs"""
@@ -69,33 +84,57 @@ class JobAutomation:
             list: List of job URLs found
         """
         try:
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-            }
-            response = requests.get(site_url, headers=headers)
+            response = requests.get(site_url, headers=self.headers, timeout=30)
+            response.raise_for_status()  # Raise exception for bad status codes
+            
             soup = BeautifulSoup(response.text, 'html.parser')
             
-            # This will need to be customized based on the structure of each site
+            # List to store job links
             job_links = []
             
-            # Example for a generic job site (will need site-specific selectors)
-            for link in soup.find_all('a', href=True):
-                href = link['href']
-                # Filter for job links (customize this logic for each site)
-                if '/job/' in href or '/career/' in href or '/position/' in href:
-                    if not href.startswith(('http://', 'https://')):
-                        # Handle relative URLs
-                        if href.startswith('/'):
-                            base_url = '/'.join(site_url.split('/')[:3])  # Get domain part of URL
-                            href = base_url + href
-                        else:
-                            href = f"{site_url.rstrip('/')}/{href.lstrip('/')}"
-                    
-                    job_links.append(href)
+            # Site-specific scraping logic - this is a generic approach
+            # LinkedIn jobs
+            if 'linkedin.com' in site_url.lower():
+                for link in soup.find_all('a', href=True):
+                    href = link['href']
+                    if '/jobs/view/' in href:
+                        if not href.startswith(('http://', 'https://')):
+                            href = f"https://www.linkedin.com{href}"
+                        job_links.append(href)
             
-            return job_links
-        except Exception as e:
+            # Indeed jobs
+            elif 'indeed.com' in site_url.lower():
+                for link in soup.find_all('a', href=True):
+                    href = link['href']
+                    if '/viewjob?' in href or '/company/' in href:
+                        if not href.startswith(('http://', 'https://')):
+                            href = f"https://www.indeed.com{href}"
+                        job_links.append(href)
+            
+            # Generic job links (fallback for other sites)
+            else:
+                for link in soup.find_all('a', href=True):
+                    href = link['href']
+                    # Filter for job links (customize this logic for each site)
+                    if '/job/' in href or '/career/' in href or '/position/' in href or 'viewjob' in href:
+                        if not href.startswith(('http://', 'https://')):
+                            # Handle relative URLs
+                            if href.startswith('/'):
+                                base_url = '/'.join(site_url.split('/')[:3])  # Get domain part of URL
+                                href = base_url + href
+                            else:
+                                href = f"{site_url.rstrip('/')}/{href.lstrip('/')}"
+                        
+                        job_links.append(href)
+            
+            # Remove duplicates and return
+            return list(set(job_links))
+            
+        except requests.RequestException as e:
             print(f"Error scraping {site_url}: {e}")
+            return []
+        except Exception as e:
+            print(f"Unexpected error scraping {site_url}: {e}")
             return []
             
     def filter_relevant_jobs(self, job_urls):
@@ -129,6 +168,10 @@ class JobAutomation:
                 # Stop once we've found enough jobs
                 if count >= self.max_jobs_per_day:
                     break
+                    
+                # Small delay to avoid overwhelming the servers
+                time.sleep(0.5)
+                
             except Exception as e:
                 print(f"Error filtering job {url}: {e}")
                 
@@ -149,6 +192,7 @@ class JobAutomation:
         print(f"Found {len(relevant_jobs)} new relevant jobs")
         
         # Process each job
+        processed_count = 0
         for job_url in relevant_jobs:
             try:
                 # Load and process job
@@ -169,7 +213,11 @@ class JobAutomation:
                     # Log success
                     print(f"Generated email for job: {job.get('role', 'Unknown Role')} at {job_url}")
                     
-                    # Optional: could implement email sending here
+                    processed_count += 1
+                    if processed_count >= self.max_jobs_per_day:
+                        print(f"Reached daily limit of {self.max_jobs_per_day} jobs")
+                        return
+                    
             except Exception as e:
                 print(f"Error processing job {job_url}: {e}")
     
@@ -203,6 +251,3 @@ if __name__ == "__main__":
     
     # Run once immediately for testing
     automation.process_jobs()
-    
-    # Then schedule it to run daily
-    # automation.run_daily(hour=9, minute=0)
